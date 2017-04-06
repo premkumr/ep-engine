@@ -19,23 +19,19 @@
 
 #include "objectregistry.h"
 
-#include "threadlocal.h"
+#include "arenamanager.h"
 #include "ep_engine.h"
 #include "stored-value.h"
+#include "threadlocal.h"
 
 #if 1
 static ThreadLocal<EventuallyPersistentEngine*> *th;
-static ThreadLocal<std::atomic<size_t>*> *initial_track;
 
-extern "C" {
-    static size_t defaultGetAllocSize(const void *) {
-        return 0;
-    }
+static size_t getAllocSize(const void *p ) {
+    auto arenaMgr = ArenaManager::get();
+    if (!arenaMgr) return 0;
+    return arenaMgr->getAllocationSize(p);
 }
-
-static get_allocation_size getAllocSize = defaultGetAllocSize;
-
-
 
 /**
  * Object registry link hook for getting the registry thread local
@@ -46,18 +42,15 @@ public:
    installer() {
       if (th == NULL) {
          th = new ThreadLocal<EventuallyPersistentEngine*>();
-         initial_track = new ThreadLocal<std::atomic<size_t>*>();
       }
    }
 
    ~installer() {
-       delete initial_track;
        delete th;
    }
 } install;
 
-static bool verifyEngine(EventuallyPersistentEngine *engine)
-{
+static bool verifyEngine(EventuallyPersistentEngine *engine) {
    if (engine == NULL) {
        if (getenv("ALLOW_NO_STATS_UPDATE") != NULL) {
            return false;
@@ -68,16 +61,7 @@ static bool verifyEngine(EventuallyPersistentEngine *engine)
    return true;
 }
 
-void ObjectRegistry::initialize(get_allocation_size func) {
-    getAllocSize = func;
-}
-
-void ObjectRegistry::reset() {
-    getAllocSize = defaultGetAllocSize;
-}
-
-void ObjectRegistry::onCreateBlob(const Blob *blob)
-{
+void ObjectRegistry::onCreateBlob(const Blob *blob) {
    EventuallyPersistentEngine *engine = th->get();
    if (verifyEngine(engine)) {
        EPStats &stats = engine->getEpStats();
@@ -93,8 +77,7 @@ void ObjectRegistry::onCreateBlob(const Blob *blob)
    }
 }
 
-void ObjectRegistry::onDeleteBlob(const Blob *blob)
-{
+void ObjectRegistry::onDeleteBlob(const Blob *blob) {
    EventuallyPersistentEngine *engine = th->get();
    if (verifyEngine(engine)) {
        EPStats &stats = engine->getEpStats();
@@ -110,8 +93,7 @@ void ObjectRegistry::onDeleteBlob(const Blob *blob)
    }
 }
 
-void ObjectRegistry::onCreateStoredValue(const StoredValue *sv)
-{
+void ObjectRegistry::onCreateStoredValue(const StoredValue *sv) {
    EventuallyPersistentEngine *engine = th->get();
    if (verifyEngine(engine)) {
        EPStats &stats = engine->getEpStats();
@@ -126,8 +108,7 @@ void ObjectRegistry::onCreateStoredValue(const StoredValue *sv)
    }
 }
 
-void ObjectRegistry::onDeleteStoredValue(const StoredValue *sv)
-{
+void ObjectRegistry::onDeleteStoredValue(const StoredValue *sv) {
    EventuallyPersistentEngine *engine = th->get();
    if (verifyEngine(engine)) {
        EPStats &stats = engine->getEpStats();
@@ -143,8 +124,7 @@ void ObjectRegistry::onDeleteStoredValue(const StoredValue *sv)
 }
 
 
-void ObjectRegistry::onCreateItem(const Item *pItem)
-{
+void ObjectRegistry::onCreateItem(const Item *pItem) {
    EventuallyPersistentEngine *engine = th->get();
    if (verifyEngine(engine)) {
        EPStats &stats = engine->getEpStats();
@@ -153,8 +133,7 @@ void ObjectRegistry::onCreateItem(const Item *pItem)
    }
 }
 
-void ObjectRegistry::onDeleteItem(const Item *pItem)
-{
+void ObjectRegistry::onDeleteItem(const Item *pItem) {
    EventuallyPersistentEngine *engine = th->get();
    if (verifyEngine(engine)) {
        EPStats &stats = engine->getEpStats();
@@ -167,27 +146,21 @@ EventuallyPersistentEngine *ObjectRegistry::getCurrentEngine() {
     return th->get();
 }
 
-EventuallyPersistentEngine *ObjectRegistry::onSwitchThread(
-                                            EventuallyPersistentEngine *engine,
-                                            bool want_old_thread_local)
-{
-    EventuallyPersistentEngine *old_engine = NULL;
-    if (want_old_thread_local) {
-        old_engine = th->get();
+void ObjectRegistry::onSwitchThread(EventuallyPersistentEngine *engine) {
+    auto arenaMgr = ArenaManager::get();
+    if (arenaMgr) {
+        if (engine) {
+            arenaMgr->switchToBucketArena(engine);
+        } else {
+            arenaMgr->switchToSystemArena();
+        }
     }
-    th->set(engine);
-    return old_engine;
-}
 
-void ObjectRegistry::setStats(std::atomic<size_t>* init_track) {
-    initial_track->set(init_track);
+    th->set(engine);
 }
 
 bool ObjectRegistry::memoryAllocated(size_t mem) {
     EventuallyPersistentEngine *engine = th->get();
-    if (initial_track->get()) {
-        initial_track->get()->fetch_add(mem);
-    }
     if (!engine) {
         return false;
     }
@@ -198,9 +171,6 @@ bool ObjectRegistry::memoryAllocated(size_t mem) {
 
 bool ObjectRegistry::memoryDeallocated(size_t mem) {
     EventuallyPersistentEngine *engine = th->get();
-    if (initial_track->get()) {
-        initial_track->get()->fetch_sub(mem);
-    }
     if (!engine) {
         return false;
     }
@@ -208,4 +178,27 @@ bool ObjectRegistry::memoryDeallocated(size_t mem) {
     stats.totalMemory->fetch_sub(mem);
     return true;
 }
+
+SystemAllocationGuard::SystemAllocationGuard() {
+    auto arenaMgr = ArenaManager::get();
+    if(arenaMgr) {
+        arenaId = arenaMgr->getCurrentArena();
+        if (!arenaMgr->switchToSystemArena()) {
+            arenaMgr->dumpStats();
+        }
+    }
+    engine = th->get();
+    th->set(nullptr);
+}
+
+SystemAllocationGuard::~SystemAllocationGuard() {
+    auto arenaMgr = ArenaManager::get();
+    if(arenaMgr) {
+        if(!arenaMgr->switchToArena(arenaId)) {
+            arenaMgr->dumpStats();
+        }
+    }
+    th->set(engine);
+}
+
 #endif

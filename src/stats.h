@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include "daemon/alloc_hooks.h"
 #include <memcached/engine.h>
 
 #include <map>
@@ -33,13 +34,14 @@
 #include "memory_tracker.h"
 #include "utility.h"
 
+
 #ifndef DEFAULT_MAX_DATA_SIZE
 /* Something something something ought to be enough for anybody */
 #define DEFAULT_MAX_DATA_SIZE (std::numeric_limits<size_t>::max())
 #endif
 
 static const hrtime_t ONE_SECOND(1000000);
-
+class EventuallyPersistentEngine;
 /**
  * Global engine stats container.
  */
@@ -172,6 +174,7 @@ public:
         dirtyAgeHisto(GrowingWidthGenerator<hrtime_t>(0, ONE_SECOND, 1.4), 25),
         diskCommitHisto(GrowingWidthGenerator<hrtime_t>(0, ONE_SECOND, 1.4), 25),
         mlogCompactorHisto(GrowingWidthGenerator<hrtime_t>(0, ONE_SECOND, 1.4), 25),
+        engine(NULL),
         timingLog(NULL),
         maxDataSize(DEFAULT_MAX_DATA_SIZE) {}
 
@@ -189,12 +192,7 @@ public:
         }
     }
 
-    size_t getTotalMemoryUsed() {
-        if (memoryTrackerEnabled.load()) {
-            return totalMemory->load();
-        }
-        return currentSize.load() + memOverhead->load();
-    }
+    size_t getTotalMemoryUsed();
 
     //! Number of keys warmed up during key-only loading.
     Counter warmedUpKeys;
@@ -572,6 +570,7 @@ public:
     Histogram<hrtime_t> persistenceCursorGetItemsHisto;
     Histogram<hrtime_t> dcpCursorsGetItemsHisto;
 
+    EventuallyPersistentEngine* engine;
     //! Reset all stats to reasonable values.
     void reset() {
         tooYoung.store(0);

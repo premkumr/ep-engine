@@ -110,24 +110,14 @@ void MemoryTracker::connectHooks() {
     }
     stats.ext_stats_size = hooks_api.get_extra_stats_size();
     stats.ext_stats = new allocator_ext_stat[stats.ext_stats_size]();
-
-    if (hooks_api.add_new_hook(&NewHook)) {
-        LOG(EXTENSION_LOG_DEBUG, "Registered add hook");
-        if (hooks_api.add_delete_hook(&DeleteHook)) {
-            LOG(EXTENSION_LOG_DEBUG, "Registered delete hook");
-            tracking = true;
-            updateStats();
-            if (cb_create_named_thread(&statsThreadId,
-                                       statsThreadMainLoop,
-                                       this, 0, "mc:mem stats") != 0) {
-                throw std::runtime_error(
-                        "Error creating thread to update stats");
-            }
-            return;
-        }
-        hooks_api.remove_new_hook(&NewHook);
+    tracking = true;
+    updateStats();
+    if (cb_create_named_thread(&statsThreadId,
+                               statsThreadMainLoop,
+                               this, 0, "mc:mem stats") != 0) {
+        throw std::runtime_error("Error creating thread to update stats");
     }
-    LOG(EXTENSION_LOG_WARNING, "Failed to register allocator hooks");
+    LOG(EXTENSION_LOG_WARNING, "Disabling mem hooks");
 }
 
 MemoryTracker::~MemoryTracker() {

@@ -50,10 +50,10 @@ public:
                     "ExecutorPool instance already created - cowardly refusing to continue!");
         }
 
-        EventuallyPersistentEngine *epe =
-                ObjectRegistry::onSwitchThread(NULL, true);
-        tmp = new SingleThreadedExecutorPool(NUM_TASK_GROUPS);
-        ObjectRegistry::onSwitchThread(epe);
+        {
+            __system_allocation__;
+            tmp = new SingleThreadedExecutorPool(NUM_TASK_GROUPS);
+        }
         instance.store(tmp);
     }
 
