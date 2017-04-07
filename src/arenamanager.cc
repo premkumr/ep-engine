@@ -103,7 +103,7 @@ void ArenaManager::destroy() {
 arenaid_t ArenaManager::allocateArena() {
     CHECK_JEMALLOC(0);
     if (!isInitialized()) return 0;
-
+    return 0;
     LockHolder lh(allocMutex);
     for (auto arenaId = baseSystemArenas; arenaId < numArenas; arenaId++) {
         // find the first free arena
@@ -167,6 +167,7 @@ bool ArenaManager::switchToBucketArena(EventuallyPersistentEngine *engine) {
 
 bool ArenaManager::switchToArena(arenaid_t arenaId_) {
     if (!isInitialized() || arenaId_ >= numArenas) return false;
+    return true;
     arenaid_t arenaId = arenaId_;
     return alloc_hooks->set_allocator_property("thread.arena", &arenaId, sizeof(arenaId));
 }
