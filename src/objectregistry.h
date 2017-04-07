@@ -18,6 +18,7 @@
 #define SRC_OBJECTREGISTRY_H_ 1
 
 #include "config.h"
+#include "arenamanager.h"
 
 #include <atomic>
 
@@ -26,22 +27,8 @@ class Blob;
 class Item;
 class StoredValue;
 
-extern "C" {
-    typedef size_t (*get_allocation_size)(const void *ptr);
-}
-
-class StoredValue;
-
 class ObjectRegistry {
 public:
-    static void initialize(get_allocation_size func);
-
-    /**
-     * Resets the ObjectRegistry back to initial state (before initialize()
-     * was called).
-     */
-    static void reset();
-
     static void onCreateBlob(const Blob *blob);
     static void onDeleteBlob(const Blob *blob);
 
@@ -54,12 +41,20 @@ public:
 
     static EventuallyPersistentEngine *getCurrentEngine();
 
-    static EventuallyPersistentEngine *onSwitchThread(EventuallyPersistentEngine *engine,
-                                                      bool want_old_thread_local = false);
-
-    static void setStats(std::atomic<size_t>* init_track);
+    static void onSwitchThread(EventuallyPersistentEngine *engine);
     static bool memoryAllocated(size_t mem);
     static bool memoryDeallocated(size_t mem);
 };
+
+class SystemAllocationGuard {
+public:
+    SystemAllocationGuard();
+    ~SystemAllocationGuard();
+private:
+    EventuallyPersistentEngine* engine = nullptr;
+    arenaid_t arenaId = 0;
+};
+
+#define __system_allocation__ SystemAllocationGuard _system_alloc_guard_;
 
 #endif  // SRC_OBJECTREGISTRY_H_

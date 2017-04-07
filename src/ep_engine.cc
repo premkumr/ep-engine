@@ -19,6 +19,7 @@
 
 #include "ep_engine.h"
 
+#include "arenamanager.h"
 #include "backfill.h"
 #include "common.h"
 #include "connmap.h"
@@ -109,12 +110,11 @@ static ENGINE_ERROR_CODE sendResponse(ADD_RESPONSE response, const void *key,
                                       uint64_t cas, const void *cookie)
 {
     ENGINE_ERROR_CODE rv = ENGINE_FAILED;
-    EventuallyPersistentEngine *e = ObjectRegistry::onSwitchThread(NULL, true);
+    __system_allocation__;
     if (response(key, keylen, ext, extlen, body, bodylen, datatype,
                  status, cas, cookie)) {
         rv = ENGINE_SUCCESS;
     }
-    ObjectRegistry::onSwitchThread(e);
     return rv;
 }
 
@@ -150,8 +150,10 @@ static ENGINE_ERROR_CODE EvpInitialize(ENGINE_HANDLE* handle,
 
 static void EvpDestroy(ENGINE_HANDLE* handle, const bool force) {
     auto eng = acquireEngine(handle);
+    auto arenaId = eng->getArena();
     eng->destroy(force);
     delete eng.get();
+    ArenaManager::get()->deallocateArena(arenaId);
 }
 
 static ENGINE_ERROR_CODE EvpItemAllocate(ENGINE_HANDLE* handle,
@@ -1720,26 +1722,31 @@ ENGINE_ERROR_CODE create_instance(uint64_t interface,
     }
 
     Logger::setLoggerAPI(api->log);
+    auto arenaMgr = ArenaManager::get();
 
+    arenaMgr->initialize(api->alloc_hooks);
     MemoryTracker::getInstance(*api->alloc_hooks);
-    ObjectRegistry::initialize(api->alloc_hooks->get_allocation_size);
 
-    std::atomic<size_t>* inital_tracking = new std::atomic<size_t>();
+    arenaMgr->switchToSystemArena();
+    auto memUsage = arenaMgr->getArenaUsage();
 
-    ObjectRegistry::setStats(inital_tracking);
     EventuallyPersistentEngine* engine;
     engine = new EventuallyPersistentEngine(get_server_api);
-    ObjectRegistry::setStats(NULL);
+    arenaMgr->switchToSystemArena();
 
     if (engine == NULL) {
         return ENGINE_ENOMEM;
     }
 
+    memUsage = arenaMgr->getArenaUsage() - memUsage;
+    auto arenaId = arenaMgr->allocateArena();
+
+    engine->getEpStats().totalMemory->store(memUsage);
+    engine->setArena(arenaId);
+
     if (MemoryTracker::trackingMemoryAllocations()) {
         engine->getEpStats().memoryTrackerEnabled.store(true);
-        engine->getEpStats().totalMemory->store(inital_tracking->load());
     }
-    delete inital_tracking;
 
     initialize_time_functions(api->core);
 
@@ -1757,7 +1764,7 @@ void destroy_engine() {
     // A single MemoryTracker exists for *all* buckets
     // and must be destroyed before unloading the shared object.
     MemoryTracker::destroyInstance();
-    ObjectRegistry::reset();
+    ArenaManager::get()->destroy();
 }
 
 static bool EvpGetItemInfo(ENGINE_HANDLE* handle, const void*,
@@ -1815,6 +1822,7 @@ EventuallyPersistentEngine::EventuallyPersistentEngine(
       deleteAllEnabled(false),
       startupTime(0),
       taskable(this) {
+    stats.engine = this;
     interface.interface = 1;
     ENGINE_HANDLE_V1::get_info = EvpGetInfo;
     ENGINE_HANDLE_V1::initialize = EvpInitialize;
@@ -1870,31 +1878,25 @@ EventuallyPersistentEngine::EventuallyPersistentEngine(
 
 ENGINE_ERROR_CODE EventuallyPersistentEngine::reserveCookie(const void *cookie)
 {
-    EventuallyPersistentEngine *epe =
-                                    ObjectRegistry::onSwitchThread(NULL, true);
+    __system_allocation__;
     ENGINE_ERROR_CODE rv = serverApi->cookie->reserve(cookie);
-    ObjectRegistry::onSwitchThread(epe);
     return rv;
 }
 
 ENGINE_ERROR_CODE EventuallyPersistentEngine::releaseCookie(const void *cookie)
 {
-    EventuallyPersistentEngine *epe =
-                                    ObjectRegistry::onSwitchThread(NULL, true);
+    __system_allocation__;
     ENGINE_ERROR_CODE rv = serverApi->cookie->release(cookie);
-    ObjectRegistry::onSwitchThread(epe);
     return rv;
 }
 
 void EventuallyPersistentEngine::registerEngineCallback(ENGINE_EVENT_TYPE type,
                                                         EVENT_CALLBACK cb,
                                                         const void *cb_data) {
-    EventuallyPersistentEngine *epe =
-                                    ObjectRegistry::onSwitchThread(NULL, true);
+    __system_allocation__;
     SERVER_CALLBACK_API *sapi = getServerApi()->callback;
     sapi->register_callback(reinterpret_cast<ENGINE_HANDLE*>(this),
                             type, cb, cb_data);
-    ObjectRegistry::onSwitchThread(epe);
 }
 
 /**
@@ -6387,4 +6389,13 @@ void EpEngineTaskable::logQTime(TaskId id,
 void EpEngineTaskable::logRunTime(TaskId id,
                                   const ProcessClock::duration runTime) {
     myEngine->getKVBucket()->logRunTime(id, runTime);
+}
+
+size_t EPStats::getTotalMemoryUsed() {
+    if (memoryTrackerEnabled.load()) {
+        //update stats and then return
+        auto mem = ArenaManager::get()->getArenaUsage(engine->getArena());
+        return totalMemory->load() + mem;
+    }
+    return currentSize.load() + memOverhead->load();
 }

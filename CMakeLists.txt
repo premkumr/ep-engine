@@ -139,6 +139,7 @@ SET(COLLECTIONS_SOURCE src/collections/manifest.cc
 
 ADD_LIBRARY(ep_objs OBJECT
             src/access_scanner.cc
+	    src/arenamanager.cc
             src/atomic.cc
             src/backfill.cc
             src/bgfetcher.cc

@@ -56,24 +56,24 @@ ENGINE_ERROR_CODE FlowControl::handleFlowCtl(
             lh.unlock();
             uint64_t opaque = consumerConn->incrOpaqueCounter();
             const std::string &controlMsgKey = consumerConn->getControlMsgKey();
-            EventuallyPersistentEngine *epe =
-                                    ObjectRegistry::onSwitchThread(NULL, true);
+            {
+            __system_allocation__;
             ret = producers->control(consumerConn->getCookie(), opaque,
                                      controlMsgKey.c_str(),
                                      controlMsgKey.length(),
                                      buf_size.c_str(),
                                      buf_size.length());
-            ObjectRegistry::onSwitchThread(epe);
+            }
             return (ret == ENGINE_SUCCESS) ? ENGINE_WANT_MORE : ret;
         } else if (isBufferSufficientlyDrained_UNLOCKED(ackable_bytes)) {
             lh.unlock();
             /* Send a buffer ack when at least 20% of the buffer is drained */
             uint64_t opaque = consumerConn->incrOpaqueCounter();
-            EventuallyPersistentEngine *epe =
-                                    ObjectRegistry::onSwitchThread(NULL, true);
-            ret = producers->buffer_acknowledgement(consumerConn->getCookie(),
-                                                    opaque, 0, ackable_bytes);
-            ObjectRegistry::onSwitchThread(epe);
+            {
+                __system_allocation__;
+                ret = producers->buffer_acknowledgement(consumerConn->getCookie(),
+                                                        opaque, 0, ackable_bytes);
+            }
             lastBufferAck = ep_current_time();
             ackedBytes.fetch_add(ackable_bytes);
             freedBytes.fetch_sub(ackable_bytes);
@@ -83,11 +83,11 @@ ENGINE_ERROR_CODE FlowControl::handleFlowCtl(
             lh.unlock();
             /* Ack at least every 5 seconds */
             uint64_t opaque = consumerConn->incrOpaqueCounter();
-            EventuallyPersistentEngine *epe =
-                                    ObjectRegistry::onSwitchThread(NULL, true);
-            ret = producers->buffer_acknowledgement(consumerConn->getCookie(),
-                                                    opaque, 0, ackable_bytes);
-            ObjectRegistry::onSwitchThread(epe);
+            {
+                __system_allocation__;
+                ret = producers->buffer_acknowledgement(consumerConn->getCookie(),
+                                                        opaque, 0, ackable_bytes);
+            }
             lastBufferAck = ep_current_time();
             ackedBytes.fetch_add(ackable_bytes);
             freedBytes.fetch_sub(ackable_bytes);

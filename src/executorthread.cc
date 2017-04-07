@@ -127,19 +127,12 @@ void ExecutorThread::run() {
             currentTask->getTaskable().logRunTime(currentTask->getTypeId(),
                                                   runtime);
             currentTask->updateRuntime(runtime);
-            if (engine) {
-                ObjectRegistry::onSwitchThread(NULL);
-            }
 
             addLogEntry(currentTask->getTaskable().getName() +
                         to_string(currentTask->getDescription()),
-                       q->getQueueType(), runtime, startReltime,
-                       (runtime > std::chrono::seconds(
-                               currentTask->maxExpectedDuration())));
-
-            if (engine) {
-                ObjectRegistry::onSwitchThread(engine);
-            }
+                        q->getQueueType(), runtime, startReltime,
+                        (runtime >
+                         std::chrono::seconds(currentTask->maxExpectedDuration())));
 
             // Check if task is run once or needs to be rescheduled..
             if (!again || currentTask->isdead()) {
@@ -170,6 +163,7 @@ void ExecutorThread::run() {
                     uint64_t(to_ns_since_epoch(getWaketime()).count()));
             }
             manager->doneWork(taskType);
+            ObjectRegistry::onSwitchThread(nullptr);
         }
     }
     // Thread is about to terminate - disassociate it from any engine.
@@ -205,6 +199,7 @@ void ExecutorThread::addLogEntry(const std::string &desc,
                                  const task_type_t taskType,
                                  const ProcessClock::duration runtime,
                                  rel_time_t t, bool isSlowJob) {
+    __system_allocation__;
     LockHolder lh(logMutex);
     TaskLogEntry tle(desc, taskType, runtime, t);
     if (isSlowJob) {

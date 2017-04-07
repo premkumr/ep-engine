@@ -21,6 +21,7 @@
 #include "programs/engine_testapp/mock_server.h"
 #include "tests/module_tests/test_helpers.h"
 #include "vbucket_test.h"
+#include "arenamanager.h"
 
 #include <gtest/gtest.h>
 #include <iomanip>
@@ -28,6 +29,7 @@
 #include <platform/cb_malloc.h>
 #include <valgrind/valgrind.h>
 
+unsigned ARENA_ID = 1;
 
 /* Measure the rate at which the defragmenter can defragment documents, using
  * the given age threshold.
@@ -62,12 +64,17 @@ static size_t benchmarkDefragment(VBucket& vbucket, size_t passes,
 class DefragmenterTest : public VBucketTest {
 public:
     static void SetUpTestCase() {
-
+        AllocHooks::enable_thread_cache(false);
         // Setup the MemoryTracker.
         MemoryTracker::getInstance(*get_mock_server_api()->alloc_hooks);
+        ArenaManager::get()->initialize(get_mock_server_api()->alloc_hooks);
+        ARENA_ID = ArenaManager::get()->allocateArena();
+        ArenaManager::get()->switchToArena(ARENA_ID);
     }
 
     static void TearDownTestCase() {
+        ArenaManager::get()->switchToSystemArena();
+        ArenaManager::get()->deallocateArena(ARENA_ID);
         MemoryTracker::destroyInstance();
     }
 
@@ -75,17 +82,12 @@ protected:
     void SetUp() override {
         // Setup object registry. As we do not create a full ep-engine, we
         // use the "initial_tracking" for all memory tracking".
-        ObjectRegistry::setStats(&mem_used);
         VBucketTest::SetUp();
     }
 
     void TearDown() override {
-        ObjectRegistry::setStats(nullptr);
         VBucketTest::TearDown();
     }
-
-    // Track of memory used (from ObjectRegistry).
-    std::atomic<size_t> mem_used{0};
 };
 
 
@@ -125,6 +127,7 @@ protected:
 
 TEST_P(DefragmenterBenchmarkTest, Populate) {
     size_t populateRate = populateVbucket();
+    ArenaManager::get()->switchToSystemArena();
     RecordProperty("items_per_sec", populateRate);
 }
 
@@ -134,6 +137,7 @@ TEST_P(DefragmenterBenchmarkTest, Visit) {
     size_t visit_rate = benchmarkDefragment(*vbucket, 1,
                                             std::numeric_limits<uint8_t>::max(),
                                             one_minute);
+    ArenaManager::get()->switchToSystemArena();
     RecordProperty("items_per_sec", visit_rate);
 }
 
@@ -142,6 +146,7 @@ TEST_P(DefragmenterBenchmarkTest, DefragAlways) {
     const size_t one_minute = 60 * 1000;
     size_t defrag_always_rate = benchmarkDefragment(*vbucket, 1, 0,
                                                     one_minute);
+    ArenaManager::get()->switchToSystemArena();
     RecordProperty("items_per_sec", defrag_always_rate);
 }
 
@@ -156,6 +161,7 @@ TEST_P(DefragmenterBenchmarkTest, DefragAge10) {
 TEST_P(DefragmenterBenchmarkTest, DefragAge10_20ms) {
     populateVbucket();
     size_t defrag_age10_20ms_rate = benchmarkDefragment(*vbucket, 1, 10, 20);
+    ArenaManager::get()->switchToSystemArena();
     RecordProperty("items_per_sec", defrag_age10_20ms_rate);
 }
 
@@ -243,7 +249,7 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
         << "Memory tracker not enabled - cannot continue";
 
     // 0. Get baseline memory usage (before creating any objects).
-    size_t mem_used_0 = mem_used.load();
+    size_t mem_used_0 = ArenaManager::get()->getArenaUsage();
     size_t mapped_0 = get_mapped_bytes();
 
     // 1. Create a number of small documents. Doesn't really matter that
@@ -264,7 +270,7 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
     }
 
     // Record memory usage after creation.
-    size_t mem_used_1 = mem_used.load();
+    size_t mem_used_1 = ArenaManager::get()->getArenaUsage();
     size_t mapped_1 = get_mapped_bytes();
 
     // Sanity check - mem_used should be at least size * count bytes larger than
@@ -330,7 +336,7 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
     unsigned int retries;
     const int RETRY_LIMIT = 100;
     for (retries = 0; retries < RETRY_LIMIT; retries++) {
-        if (mem_used.load() < expected_mem) {
+        if (ArenaManager::get()->getArenaUsage() < expected_mem) {
             break;
         }
         usleep(100);
@@ -353,12 +359,12 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
         << previous_mapped << "). ";
 
     // 3. Enable defragmenter and trigger defragmentation
-    AllocHooks::enable_thread_cache(false);
+    //AllocHooks::enable_thread_cache(false);
 
     DefragmentVisitor visitor(0);
     visitor.visit(vbucket->getId(), vbucket->ht);
 
-    AllocHooks::enable_thread_cache(true);
+    //AllocHooks::enable_thread_cache(true);
     AllocHooks::release_free_memory();
 
     // Check that mapped memory has decreased after defragmentation - should be
