@@ -189,9 +189,40 @@ public:
         }
     }
 
+    struct SizeCounters {
+        static const int kArraySize = 113;
+        std::vector<cb::CachelinePadded<std::atomic<long long> > > arr;
+        SizeCounters() : arr(kArraySize) {
+            for ( auto i = 0; i < kArraySize ; i++) {
+                arr[i]->store(0);
+            }
+        }
+        void memoryAllocated(size_t mem) {
+            auto id = gethrtime() % kArraySize;
+            //auto id = 1;
+            arr[id]->fetch_add(mem);
+        }
+
+        void memoryDeallocated(size_t mem) {
+            auto id = gethrtime() % kArraySize;
+            //auto id = 1;
+            arr[id]->fetch_sub(mem);
+        }
+
+        double getUsage() {
+            double usage = 0;
+            for ( auto i = 0; i < kArraySize ; i++) {
+                usage += arr[i]->load(std::memory_order_relaxed);
+            }
+            return usage > 0 ? usage : 0;
+        }
+    };
+
+
     size_t getTotalMemoryUsed() {
         if (memoryTrackerEnabled.load()) {
-            return totalMemory->load();
+            //return totalMemory->load();
+            return memCounters->getUsage();
         }
         return currentSize.load() + memOverhead->load();
     }
@@ -571,6 +602,8 @@ public:
     //! Checkpoint Cursor histograms
     Histogram<hrtime_t> persistenceCursorGetItemsHisto;
     Histogram<hrtime_t> dcpCursorsGetItemsHisto;
+
+    cb::CachelinePadded<SizeCounters> memCounters;
 
     //! Reset all stats to reasonable values.
     void reset() {

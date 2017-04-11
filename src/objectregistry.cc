@@ -192,7 +192,8 @@ bool ObjectRegistry::memoryAllocated(size_t mem) {
         return false;
     }
     EPStats &stats = engine->getEpStats();
-    stats.totalMemory->fetch_add(mem);
+    //stats.totalMemory->fetch_add(mem);
+    stats.memCounters->memoryAllocated(mem);
     return true;
 }
 
@@ -205,7 +206,8 @@ bool ObjectRegistry::memoryDeallocated(size_t mem) {
         return false;
     }
     EPStats &stats = engine->getEpStats();
-    stats.totalMemory->fetch_sub(mem);
+    //stats.totalMemory->fetch_sub(mem);
+    stats.memCounters->memoryDeallocated(mem);
     return true;
 }
 #endif
