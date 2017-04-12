@@ -5847,7 +5847,7 @@ static enum test_result test_hlc_cas(ENGINE_HANDLE *h,
     Checks that writing the same key to many buckets works as it should.
 */
 static enum test_result test_multi_bucket_set_get(engine_test_t* test) {
-    const int n_buckets = 20;
+    const int n_buckets = 10;
     std::vector<BucketHolder> buckets;
     if (create_buckets(test->cfg, n_buckets, buckets) != n_buckets) {
         destroy_buckets(buckets);
@@ -5865,6 +5865,7 @@ static enum test_result test_multi_bucket_set_get(engine_test_t* test) {
         item*i = NULL;
         std::stringstream val;
         val << "value_" << ii++;
+
         checkeq(ENGINE_SUCCESS,
               store(bucket.h, bucket.h1, NULL,
                     OPERATION_SET, "key", val.str().c_str(), &i),

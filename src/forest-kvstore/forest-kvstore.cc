@@ -52,13 +52,12 @@ extern "C" {
 void ForestKVStore::initForestDb() {
     LockHolder lh(initLock);
     if (numGlobalFiles == 0) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         fdb_status status = fdb_init(&fileConfig);
         if (status != FDB_RESULT_SUCCESS) {
             throw std::logic_error("ForestKVStore::initForestDb: failed "
                     "with status:" + std::to_string(status));
         }
-        ObjectRegistry::onSwitchThread(epe);
     }
     ++numGlobalFiles;
 }
@@ -66,14 +65,13 @@ void ForestKVStore::initForestDb() {
 void ForestKVStore::shutdownForestDb() {
    LockHolder lh(initLock);
    if (--numGlobalFiles == 0) {
-       EventuallyPersistentEngine* epe = ObjectRegistry::onSwitchThread(NULL, true);
+       __system_allocation__;
        fdb_status status = fdb_shutdown();
        if (status != FDB_RESULT_SUCCESS) {
            LOG(EXTENSION_LOG_WARNING,
                "ForestKVStore::shutdownForestDb: Shutting down forestdb failed "
                "with error: %s", fdb_error_msg(status));
        }
-       ObjectRegistry::onSwitchThread(epe);
    }
 }
 

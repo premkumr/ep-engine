@@ -66,7 +66,8 @@ void Logger::vlog(EXTENSION_LOG_LEVEL severity, const char* fmt, va_list va) con
                                std::memory_order_relaxed);
     }
 
-    EventuallyPersistentEngine *engine = ObjectRegistry::onSwitchThread(NULL, true);
+    EventuallyPersistentEngine *engine = ObjectRegistry::getCurrentEngine();
+    __system_allocation__;
     // Log it.
     if (logger) {
 
@@ -102,8 +103,6 @@ void Logger::vlog(EXTENSION_LOG_LEVEL severity, const char* fmt, va_list va) con
                         nw);
         }
     }
-
-    ObjectRegistry::onSwitchThread(engine);
 }
 
 void Logger::setLoggerAPI(SERVER_LOG_API* api) {

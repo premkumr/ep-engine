@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include "arenamanager.h"
 #include "kv_bucket.h"
 #include "storeddockey.h"
 #include "tapconnection.h"
@@ -326,9 +327,8 @@ public:
     void queueBackfill(const VBucketFilter &backfillVBFilter, Producer *tc);
 
     void setDCPPriority(const void* cookie, CONN_PRIORITY priority) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         serverApi->cookie->set_priority(cookie, priority);
-        ObjectRegistry::onSwitchThread(epe);
     }
 
     void notifyIOComplete(const void *cookie, ENGINE_ERROR_CODE status) {
@@ -336,9 +336,8 @@ public:
             LOG(EXTENSION_LOG_WARNING, "Tried to signal a NULL cookie!");
         } else {
             BlockTimer bt(&stats.notifyIOHisto);
-            EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+            __system_allocation__;
             serverApi->cookie->notify_io_complete(cookie, status);
-            ObjectRegistry::onSwitchThread(epe);
         }
     }
 
@@ -346,31 +345,27 @@ public:
     ENGINE_ERROR_CODE releaseCookie(const void *cookie);
 
     void storeEngineSpecific(const void *cookie, void *engine_data) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         serverApi->cookie->store_engine_specific(cookie, engine_data);
-        ObjectRegistry::onSwitchThread(epe);
     }
 
     void *getEngineSpecific(const void *cookie) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         void *engine_data = serverApi->cookie->get_engine_specific(cookie);
-        ObjectRegistry::onSwitchThread(epe);
         return engine_data;
     }
 
     bool isDatatypeSupported(const void* cookie,
                              protocol_binary_datatype_t datatype) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         bool isSupported =
-                serverApi->cookie->is_datatype_supported(cookie, datatype);
-        ObjectRegistry::onSwitchThread(epe);
+            serverApi->cookie->is_datatype_supported(cookie, datatype);
         return isSupported;
     }
 
     bool isMutationExtrasSupported(const void *cookie) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         bool isSupported = serverApi->cookie->is_mutation_extras_supported(cookie);
-        ObjectRegistry::onSwitchThread(epe);
         return isSupported;
     }
 
@@ -379,23 +374,20 @@ public:
     }
 
     uint8_t getOpcodeIfEwouldblockSet(const void *cookie) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         uint8_t opcode = serverApi->cookie->get_opcode_if_ewouldblock_set(cookie);
-        ObjectRegistry::onSwitchThread(epe);
         return opcode;
     }
 
     bool validateSessionCas(const uint64_t cas) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         bool ret = serverApi->cookie->validate_session_cas(cas);
-        ObjectRegistry::onSwitchThread(epe);
         return ret;
     }
 
     void decrementSessionCtr(void) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         serverApi->cookie->decrement_session_ctr();
-        ObjectRegistry::onSwitchThread(epe);
     }
 
     void registerEngineCallback(ENGINE_EVENT_TYPE type,
@@ -403,11 +395,10 @@ public:
 
     template <typename T>
     void notifyIOComplete(T cookies, ENGINE_ERROR_CODE status) {
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         std::for_each(cookies.begin(), cookies.end(),
                       std::bind2nd(std::ptr_fun((NOTIFY_IO_COMPLETE_T)serverApi->cookie->notify_io_complete),
                                    status));
-        ObjectRegistry::onSwitchThread(epe);
     }
 
     void handleDisconnect(const void *cookie);
@@ -627,6 +618,14 @@ public:
 
     EpEngineTaskable& getTaskable() {
         return taskable;
+    }
+
+    unsigned int getArena() {
+        return arenaId;
+    }
+
+    void setArena(arenaid_t arenaId) {
+        this->arenaId = arenaId;
     }
 
 protected:
@@ -951,6 +950,7 @@ protected:
     // ep_engine starts up.
     std::atomic<time_t> startupTime;
     EpEngineTaskable taskable;
+    arenaid_t arenaId;
 };
 
 #endif  // SRC_EP_ENGINE_H_

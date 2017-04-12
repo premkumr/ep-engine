@@ -575,7 +575,8 @@ ENGINE_ERROR_CODE DcpConsumer::step(struct dcp_message_producers* producers) {
         return ENGINE_SUCCESS;
     }
 
-    EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+    {
+    __system_allocation__;
     switch (resp->getEvent()) {
         case DcpResponse::Event::AddStream:
         {
@@ -617,7 +618,7 @@ ENGINE_ERROR_CODE DcpConsumer::step(struct dcp_message_producers* producers) {
                 "disconnecting", logHeader(), int(resp->getEvent()));
             ret = ENGINE_DISCONNECT;
     }
-    ObjectRegistry::onSwitchThread(epe);
+    } // __system_allocation__
     delete resp;
 
     if (ret == ENGINE_SUCCESS) {
@@ -1017,11 +1018,12 @@ ENGINE_ERROR_CODE DcpConsumer::handleNoop(struct dcp_message_producers* producer
         ENGINE_ERROR_CODE ret;
         uint32_t opaque = ++opaqueCounter;
         std::string val("true");
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        {
+        __system_allocation__;
         ret = producers->control(getCookie(), opaque,
                                  noopCtrlMsg.c_str(), noopCtrlMsg.size(),
                                  val.c_str(), val.size());
-        ObjectRegistry::onSwitchThread(epe);
+        } // end of __system_allocation__
         pendingEnableNoop = false;
         return ret;
     }
@@ -1030,12 +1032,13 @@ ENGINE_ERROR_CODE DcpConsumer::handleNoop(struct dcp_message_producers* producer
         ENGINE_ERROR_CODE ret;
         uint32_t opaque = ++opaqueCounter;
         std::string interval = std::to_string(dcpNoopTxInterval.count());
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        {
+        __system_allocation__;
         ret = producers->control(getCookie(), opaque,
                                  noopIntervalCtrlMsg.c_str(),
                                  noopIntervalCtrlMsg.size(),
                                  interval.c_str(), interval.size());
-        ObjectRegistry::onSwitchThread(epe);
+        } // end of __system_allocation__
         pendingSendNoopInterval = false;
         return ret;
     }
@@ -1056,11 +1059,10 @@ ENGINE_ERROR_CODE DcpConsumer::handlePriority(struct dcp_message_producers* prod
         ENGINE_ERROR_CODE ret;
         uint32_t opaque = ++opaqueCounter;
         std::string val("high");
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         ret = producers->control(getCookie(), opaque,
                                  priorityCtrlMsg.c_str(), priorityCtrlMsg.size(),
                                  val.c_str(), val.size());
-        ObjectRegistry::onSwitchThread(epe);
         pendingSetPriority = false;
         return ret;
     }
@@ -1073,12 +1075,11 @@ ENGINE_ERROR_CODE DcpConsumer::handleExtMetaData(struct dcp_message_producers* p
         ENGINE_ERROR_CODE ret;
         uint32_t opaque = ++opaqueCounter;
         std::string val("true");
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         ret = producers->control(getCookie(), opaque,
                                  extMetadataCtrlMsg.c_str(),
                                  extMetadataCtrlMsg.size(),
                                  val.c_str(), val.size());
-        ObjectRegistry::onSwitchThread(epe);
         pendingEnableExtMetaData = false;
         return ret;
     }
@@ -1091,12 +1092,11 @@ ENGINE_ERROR_CODE DcpConsumer::handleValueCompression(struct dcp_message_produce
         ENGINE_ERROR_CODE ret;
         uint32_t opaque = ++opaqueCounter;
         std::string val("true");
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         ret = producers->control(getCookie(), opaque,
                                  valueCompressionCtrlMsg.c_str(),
                                  valueCompressionCtrlMsg.size(),
                                  val.c_str(), val.size());
-        ObjectRegistry::onSwitchThread(epe);
         pendingEnableValueCompression = false;
         return ret;
     }
@@ -1109,12 +1109,11 @@ ENGINE_ERROR_CODE DcpConsumer::supportCursorDropping(struct dcp_message_producer
         ENGINE_ERROR_CODE ret;
         uint32_t opaque = ++opaqueCounter;
         std::string val("true");
-        EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
+        __system_allocation__;
         ret = producers->control(getCookie(), opaque,
                                  cursorDroppingCtrlMsg.c_str(),
                                  cursorDroppingCtrlMsg.size(),
                                  val.c_str(), val.size());
-        ObjectRegistry::onSwitchThread(epe);
         pendingSupportCursorDropping = false;
         return ret;
     }

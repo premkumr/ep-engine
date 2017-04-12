@@ -65,7 +65,8 @@ bool DefragmenterTask::run(void) {
         // want any of the new Blobs in tcache).
         ALLOCATOR_HOOKS_API* alloc_hooks = engine->getServerApi()->alloc_hooks;
         bool old_tcache = alloc_hooks->enable_thread_cache(false);
-
+        LOG(EXTENSION_LOG_NOTICE, "Defragmenter - thread.tcache:%s",old_tcache?"enabled":"disabled" );
+        
         // Prepare the visitor.
         hrtime_t start = gethrtime();
         hrtime_t deadline = start + (getChunkDurationMS() * 1000 * 1000);
@@ -79,7 +80,7 @@ bool DefragmenterTask::run(void) {
         hrtime_t end = gethrtime();
 
         // Defrag complete. Restore thread caching.
-        alloc_hooks->enable_thread_cache(old_tcache);
+        //alloc_hooks->enable_thread_cache(old_tcache);
 
         // Update stats
         stats.defragNumMoved.fetch_add(visitor->getDefragCount());

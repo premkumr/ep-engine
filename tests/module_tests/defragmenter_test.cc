@@ -100,7 +100,7 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
         << "Memory tracker not enabled - cannot continue";
 
     // 0. Get baseline memory usage (before creating any objects).
-    size_t mem_used_0 = mem_used.load();
+    size_t mem_used_0 = ArenaManager::get()->getArenaUsage();
     size_t mapped_0 = get_mapped_bytes();
 
     // 1. Create a number of small documents. Doesn't really matter that
@@ -129,7 +129,7 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
     // items we want to delete
     vbucket->checkpointManager.clear(vbucket->getState());
     // Record memory usage after creation.
-    size_t mem_used_1 = mem_used.load();
+    size_t mem_used_1 = ArenaManager::get()->getArenaUsage();
     size_t mapped_1 = get_mapped_bytes();
 
     // Sanity check - mem_used should be at least size * count bytes larger than
@@ -195,7 +195,7 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
     unsigned int retries;
     const int RETRY_LIMIT = 100;
     for (retries = 0; retries < RETRY_LIMIT; retries++) {
-        if (mem_used.load() < expected_mem) {
+        if (ArenaManager::get()->getArenaUsage() < expected_mem) {
             break;
         }
         usleep(100);
@@ -218,12 +218,12 @@ TEST_P(DefragmenterTest, DISABLED_MappedMemory) {
         << previous_mapped << "). ";
 
     // 3. Enable defragmenter and trigger defragmentation
-    AllocHooks::enable_thread_cache(false);
+    //AllocHooks::enable_thread_cache(false);
 
     DefragmentVisitor visitor(0);
     visitor.visit(vbucket->getId(), vbucket->ht);
 
-    AllocHooks::enable_thread_cache(true);
+    //AllocHooks::enable_thread_cache(true);
     AllocHooks::release_free_memory();
 
     // Check that mapped memory has decreased after defragmentation - should be

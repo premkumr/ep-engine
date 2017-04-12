@@ -20,6 +20,8 @@
 #include "vbucket_test.h"
 
 #include <programs/engine_testapp/mock_server.h>
+#include "arenamanager.h"
+unsigned ARENA_ID = 1;
 
 class DefragmenterTest : public VBucketTest {
 public:
@@ -27,9 +29,15 @@ public:
 
         // Setup the MemoryTracker.
         MemoryTracker::getInstance(*get_mock_server_api()->alloc_hooks);
+        ArenaManager::get()->initialize(get_mock_server_api()->alloc_hooks);
+        ARENA_ID = ArenaManager::get()->allocateArena();
+        ArenaManager::get()->switchToArena(ARENA_ID);
+
     }
 
     static void TearDownTestCase() {
+        ArenaManager::get()->switchToSystemArena();
+        ArenaManager::get()->deallocateArena(ARENA_ID);
         MemoryTracker::destroyInstance();
     }
 
@@ -37,12 +45,12 @@ protected:
     void SetUp() override {
         // Setup object registry. As we do not create a full ep-engine, we
         // use the "initial_tracking" for all memory tracking".
-        ObjectRegistry::setStats(&mem_used);
+        // ObjectRegistry::setStats(&mem_used);
         VBucketTest::SetUp();
     }
 
     void TearDown() override {
-        ObjectRegistry::setStats(nullptr);
+        // ObjectRegistry::setStats(nullptr);
         VBucketTest::TearDown();
     }
 

@@ -290,9 +290,10 @@ ENGINE_ERROR_CODE FailoverTable::addFailoverLog(const void* cookie,
         logentry++;
     }
 
-    EventuallyPersistentEngine *epe = ObjectRegistry::onSwitchThread(NULL, true);
-    rv = callback(logentries, logsize, cookie);
-    ObjectRegistry::onSwitchThread(epe);
+    {
+        __system_allocation__;
+        rv = callback(logentries, logsize, cookie);
+    }
     delete[] logentries;
 
     return rv;
