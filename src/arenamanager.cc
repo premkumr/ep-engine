@@ -174,7 +174,7 @@ bool ArenaManager::switchToBucketArena(EventuallyPersistentEngine *engine) {
 bool ArenaManager::switchToArena(arenaid_t arenaId_) {
     if (!isInitialized() || arenaId_ >= numArenas) return false;
     arenaid_t arenaId = arenaId_;
-    return alloc_hooks->set_allocator_property("thread.arena", &arenaId, sizeof(arenaId));
+    return alloc_hooks->set_allocator_property(NULL, &arenaId, sizeof(arenaId));
 }
 
 bool ArenaManager::switchToSystemArena() {
@@ -186,7 +186,7 @@ arenaid_t ArenaManager::getCurrentArena() {
     if (!isInitialized()) return 0;
     arenaid_t arenaId = 0;
     size_t size = sizeof(arenaId);
-    alloc_hooks->get_allocator_property("thread.arena", &arenaId, &size);
+    alloc_hooks->get_allocator_property(NULL, &arenaId, &size);
     return arenaId;
 }
 
