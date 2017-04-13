@@ -55,8 +55,6 @@ ArenaManager* ArenaManager::get() {
         if (tmp == nullptr) {
             fDumpArenaStats = getenv("ARENA_STATS") != NULL;
             tmp = new ArenaManager(100);
-            LOG(EXTENSION_LOG_NOTICE,
-                "Arena Manager Instantiated - [%d] arenas",100);
             instance.store(tmp);
         }
     }
