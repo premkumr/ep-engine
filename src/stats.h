@@ -32,6 +32,8 @@
 #include <atomic>
 #include "memory_tracker.h"
 #include "utility.h"
+#include "objectregistry.h"
+#include "threadlocal.h"
 
 #ifndef DEFAULT_MAX_DATA_SIZE
 /* Something something something ought to be enough for anybody */
@@ -173,6 +175,15 @@ public:
         diskCommitHisto(GrowingWidthGenerator<hrtime_t>(0, ONE_SECOND, 1.4), 25),
         mlogCompactorHisto(GrowingWidthGenerator<hrtime_t>(0, ONE_SECOND, 1.4), 25),
         timingLog(NULL),
+        localMemCounter([](void* ptr) -> void {
+                if (ptr != NULL) {
+                    // This HAS to be in a non-bucket deallocation
+                    // or else the callbacks could try to update counters
+                    // that no longer exist
+                    __system_allocation__;
+                    delete (TLMemCounter*)ptr;
+                }
+            }),
         maxDataSize(DEFAULT_MAX_DATA_SIZE) {}
 
     ~EPStats() {
@@ -191,10 +202,20 @@ public:
 
     size_t getTotalMemoryUsed() {
         if (memoryTrackerEnabled.load()) {
-            return totalMemory->load();
+            auto val = totalMemory->load();
+            return val>=0 ? val : 0;
         }
         return currentSize.load() + memOverhead->load();
     }
+
+    // account for allocated mem
+    void memAllocated(size_t sz);
+
+    // account for deallocated mem
+    void memDeallocated(size_t sz);
+
+    // merge accumulated local memory to the bucket variable
+    void mergeMemCounter(bool force=false);
 
     //! Number of keys warmed up during key-only loading.
     Counter warmedUpKeys;
@@ -315,12 +336,11 @@ public:
     //! Total number of Item objects
     cb::CachelinePadded<Counter> numItem;
     //! The total amount of memory used by this bucket (From memory tracking)
-    cb::CachelinePadded<Counter> totalMemory;
+    cb::CachelinePadded<Couchbase::RelaxedAtomic<long long> > totalMemory;
     //! True if the memory usage tracker is enabled.
     std::atomic<bool> memoryTrackerEnabled;
     //! Whether or not to force engine shutdown.
     std::atomic<bool> forceShutdown;
-
     //! Number of times unrecoverable oom errors happened while processing operations.
     Counter oom_errors;
     //! Number of times temporary oom errors encountered while processing operations.
@@ -656,7 +676,19 @@ public:
     // Used by stats logging infrastructure.
     std::ostream *timingLog;
 
+    size_t mem_merge_count_threshold = 100;
+    size_t mem_merge_size_threshold = 102400;
+
 private:
+    struct TLMemCounter {
+        // accumulated mem
+        long long used = 0;
+
+        // no.of times mem accounting has happened
+        size_t count = 0;
+    };
+
+    ThreadLocalPtr<TLMemCounter> localMemCounter;
 
     //! Max allowable memory size.
     std::atomic<size_t> maxDataSize;

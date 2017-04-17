@@ -36,9 +36,10 @@
  */
 template<typename T>
 class ThreadLocalPosix {
+    ThreadLocalDestructor dtor = NULL;
 public:
-    ThreadLocalPosix() {
-        int rc = pthread_key_create(&key, NULL);
+    ThreadLocalPosix(ThreadLocalDestructor dtor = NULL) : dtor(dtor) {
+        int rc = pthread_key_create(&key, dtor);
         if (rc != 0) {
             std::string msg = "Failed to create a thread-specific key: ";
             msg.append(strerror(rc));
